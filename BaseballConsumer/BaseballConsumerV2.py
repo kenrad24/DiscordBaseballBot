@@ -1,12 +1,5 @@
 '''
 
-BASEBALL GAME THREAD BOT
-
-Written by:
-KimbaWLion
-
-Please contact us on Github if you have any questions.
-
 '''
 
 import statsapi
@@ -205,6 +198,7 @@ class BaseballUpdaterBotV2:
         with open(SETTINGS_FILE) as data:
             settings = json.load(data)
 
+            #TODO Add the creation of the log file if not found.
             self.GAME_THREAD_LOG = settings.get('GAME_THREAD_LOG')
             if self.GAME_THREAD_LOG == None: return "Missing GAME_THREAD_LOG"
 
