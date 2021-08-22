@@ -1,5 +1,14 @@
 '''
 
+BASEBALL GAME THREAD BOT
+
+Original Author
+https://www.github.com/KimbaWLion
+
+Modified for Docker
+https://www.github.com/Kenrad24
+Please contact us on Github if you have any questions.
+
 '''
 
 import statsapi
@@ -13,6 +22,7 @@ from TeamAndStandingsUtilities import get_division_for_teamId
 
 SETTINGS_FILE = './settings.json'
 
+
 class BaseballUpdaterBotV2:
 
     async def run(self, client, channel):
@@ -25,10 +35,12 @@ class BaseballUpdaterBotV2:
 
         while True:
             idsOfPrevEvents = self.getEventIdsFromLog()
-            todaysGame = (datetime.now() - timedelta(hours=5)).strftime("%m/%d/%Y")
+            todaysGame = (datetime.now() - timedelta(hours=5)
+                          ).strftime("%m/%d/%Y")
             how_long_to_wait_in_sec = 300
 
-            sched = statsapi.get("schedule", {'sportId': 1, "teamId": self.TEAM_ID, "date": todaysGame, "hydrate": "leagueRecord,decisions,probablePitcher(note),linescore"})
+            sched = statsapi.get("schedule", {'sportId': 1, "teamId": self.TEAM_ID, "date": todaysGame,
+                                 "hydrate": "leagueRecord,decisions,probablePitcher(note),linescore"})
 
             if not sched['dates']:
                 noGameId = ''.join(["NoGameToday", todaysGame])
@@ -41,30 +53,41 @@ class BaseballUpdaterBotV2:
             else:
                 for game in sched['dates'][0]['games']:
                     # Get team names
-                    homeTeamInfo = self.lookupTeamInfo(game['teams']['home']['team']['id'])
-                    awayTeamInfo = self.lookupTeamInfo(game['teams']['away']['team']['id'])
+                    homeTeamInfo = self.lookupTeamInfo(
+                        game['teams']['home']['team']['id'])
+                    awayTeamInfo = self.lookupTeamInfo(
+                        game['teams']['away']['team']['id'])
                     # Add current game score
                     # Note, linescore isn't always populated :(
-                    try: homeTeamInfo['game_score'] = game['linescore']['teams']['home']['runs']
-                    except KeyError: homeTeamInfo['game_score'] = 0
-                    try: awayTeamInfo['game_score'] = game['linescore']['teams']['away']['runs']
-                    except KeyError: awayTeamInfo['game_score'] = 0
+                    try:
+                        homeTeamInfo['game_score'] = game['linescore']['teams']['home']['runs']
+                    except KeyError:
+                        homeTeamInfo['game_score'] = 0
+                    try:
+                        awayTeamInfo['game_score'] = game['linescore']['teams']['away']['runs']
+                    except KeyError:
+                        awayTeamInfo['game_score'] = 0
 
-                        # Add team records
+                      # Add team records
                     homeTeamInfo['wins'] = game['teams']['home']['leagueRecord']['wins']
                     homeTeamInfo['losses'] = game['teams']['home']['leagueRecord']['losses']
                     awayTeamInfo['wins'] = game['teams']['away']['leagueRecord']['wins']
                     awayTeamInfo['losses'] = game['teams']['away']['leagueRecord']['losses']
                     # Add pitcher data
-                    homeTeamInfo['probable_pitcher_name'] = game['teams']['home']['probablePitcher']['fullName'] if 'probablePitcher' in game['teams']['home'] else ''
-                    homeTeamInfo['probable_pitcher_id'] = game['teams']['home']['probablePitcher']['id'] if 'probablePitcher' in game['teams']['home'] else ''
-                    awayTeamInfo['probable_pitcher_name'] = game['teams']['away']['probablePitcher']['fullName'] if 'probablePitcher' in game['teams']['away'] else ''
-                    awayTeamInfo['probable_pitcher_id'] = game['teams']['away']['probablePitcher']['id'] if 'probablePitcher' in game['teams']['away'] else ''
+                    homeTeamInfo['probable_pitcher_name'] = game['teams']['home']['probablePitcher'][
+                        'fullName'] if 'probablePitcher' in game['teams']['home'] else ''
+                    homeTeamInfo['probable_pitcher_id'] = game['teams']['home']['probablePitcher'][
+                        'id'] if 'probablePitcher' in game['teams']['home'] else ''
+                    awayTeamInfo['probable_pitcher_name'] = game['teams']['away']['probablePitcher'][
+                        'fullName'] if 'probablePitcher' in game['teams']['away'] else ''
+                    awayTeamInfo['probable_pitcher_id'] = game['teams']['away']['probablePitcher'][
+                        'id'] if 'probablePitcher' in game['teams']['away'] else ''
 
                     # First, check if the game status has changed
                     gameStatus = game['status']['detailedState']
-                    gameStatusWaitTime = how_long_to_wait_in_sec # default wait of 300 sec
-                    gameStatusId = ''.join([gameStatus.replace(" ", ""), ';', str(game['gamePk']), todaysGame])
+                    gameStatusWaitTime = how_long_to_wait_in_sec  # default wait of 300 sec
+                    gameStatusId = ''.join(
+                        [gameStatus.replace(" ", ""), ';', str(game['gamePk']), todaysGame])
                     if gameStatusId not in idsOfPrevEvents:
                         await self.postGameStatusOnDiscord(channel, gameStatus, awayTeamInfo, homeTeamInfo, todaysGame, game['gameDate'])
                         self.printStatusToLog(gameStatusId, gameStatus)
@@ -96,17 +119,21 @@ class BaseballUpdaterBotV2:
 
                     # If game is a doubleheader, if the 2nd game has a longer wait time than the first, use the first's wait time
                     gameIsDoubleHeader = game['doubleHeader'] != "N"
-                    how_long_to_wait_in_sec = gameStatusWaitTime if not gameIsDoubleHeader else (how_long_to_wait_in_sec if how_long_to_wait_in_sec < gameStatusWaitTime else gameStatusWaitTime)
+                    how_long_to_wait_in_sec = gameStatusWaitTime if not gameIsDoubleHeader else (
+                        how_long_to_wait_in_sec if how_long_to_wait_in_sec < gameStatusWaitTime else gameStatusWaitTime)
 
                     # If game is currently active, search for plays to post
                     if gameStatus == 'In Progress' or 'Manager challenge' in gameStatus or 'Game Over' in gameStatus:
                         # Game Event logic
-                        gameInfo = statsapi.get('game', {'gamePk': game['gamePk']})
+                        gameInfo = statsapi.get(
+                            'game', {'gamePk': game['gamePk']})
                         liveData = gameInfo['liveData']
                         plays = liveData['plays']['allPlays']
                         linescore = liveData['linescore']
-                        fullLinescoreString = statsapi.linescore(game['gamePk'])
-                        strikeoutTracker = {'home': [], 'away': []} # Boolean list, true = swinging, false = looking
+                        fullLinescoreString = statsapi.linescore(
+                            game['gamePk'])
+                        # Boolean list, true = swinging, false = looking
+                        strikeoutTracker = {'home': [], 'away': []}
 
                         for play in plays:
                             # If the item is not full yet (as in the atbat is finished) skip
@@ -131,8 +158,10 @@ class BaseballUpdaterBotV2:
                             info['balls'] = str(play['count']['balls'])
                             info['strikes'] = str(play['count']['strikes'])
                             info['outs'] = str(play['count']['outs'])
-                            info['homeScore'] = str(play['result']['homeScore'])
-                            info['awayScore'] = str(play['result']['awayScore'])
+                            info['homeScore'] = str(
+                                play['result']['homeScore'])
+                            info['awayScore'] = str(
+                                play['result']['awayScore'])
                             info['description'] = play['result']['description']
                             info['event'] = play['result']['event']
                             info['rbi'] = play['result']['rbi']
@@ -150,17 +179,20 @@ class BaseballUpdaterBotV2:
 
                             # Get info from linescore
                             info['outs_linescore'] = linescore['outs']
-                            info['homeStats_linescore'] = linescore['teams']['home'] #runs, hits, errors, lefOnBase
+                            # runs, hits, errors, lefOnBase
+                            info['homeStats_linescore'] = linescore['teams']['home']
                             info['awayStats_linescore'] = linescore['teams']['away']
                             info['currentInning_linescore'] = linescore['currentInning']
-                            info['inningState_linescore'] = linescore['inningState'] # Middle or End
+                            # Middle or End
+                            info['inningState_linescore'] = linescore['inningState']
                             info['inningHalf_linescore'] = linescore['inningHalf']
 
                             # Get full linescore summary
                             info['fullLinescoreString'] = fullLinescoreString
 
                             # playType isn't working, do it yourself
-                            info['playTypeActual'] = self.getPlayType(info['description'])
+                            info['playTypeActual'] = self.getPlayType(
+                                info['description'])
 
                             # Update strikeout tracker
                             if info['event'] == 'Strikeout':
@@ -180,9 +212,9 @@ class BaseballUpdaterBotV2:
                                     strikeoutTracker['home'] = currentStrikeouts
                             info['strikeoutTracker'] = strikeoutTracker
 
-
                             # Generate ID unique for each play
-                            info['id'] = ''.join([info['startTime'].split(":")[0],';',info['outs'],';',info['inning'],';',info['homeScore'],';',info['awayScore'],';',info['description'].replace(" ", "")])
+                            info['id'] = ''.join([info['startTime'].split(":")[0], ';', info['outs'], ';', info['inning'],
+                                                 ';', info['homeScore'], ';', info['awayScore'], ';', info['description'].replace(" ", "")])
 
                             # if ID is not in log, add it to log and then post update on Discord
                             if info['id'] not in idsOfPrevEvents:
@@ -200,10 +232,12 @@ class BaseballUpdaterBotV2:
 
             #TODO Add the creation of the log file if not found.
             self.GAME_THREAD_LOG = settings.get('GAME_THREAD_LOG')
-            if self.GAME_THREAD_LOG == None: return "Missing GAME_THREAD_LOG"
+            if self.GAME_THREAD_LOG == None:
+                return "Missing GAME_THREAD_LOG"
 
             self.TEAM_ID = settings.get('TEAM_ID')
-            if self.TEAM_ID == None: return "Missing TEAM_ID"
+            if self.TEAM_ID == None:
+                return "Missing TEAM_ID"
 
         return 0
 
@@ -213,13 +247,15 @@ class BaseballUpdaterBotV2:
 
     def printToLog(self, info):
         with open(self.GAME_THREAD_LOG, "a") as log:
-            log.write("[{}] [{}] | {}\n".format(self.getTime(), info['id'], info['description']))
+            log.write("[{}] [{}] | {}\n".format(
+                self.getTime(), info['id'], info['description']))
         log.close()
         print("[{}] New atBat: {}".format(self.getTime(), info['description']))
 
     def printStatusToLog(self, statusId, status):
         with open(self.GAME_THREAD_LOG, "a") as log:
-            log.write("[{}] [{}] | {}\n".format(self.getTime(), statusId, status))
+            log.write("[{}] [{}] | {}\n".format(
+                self.getTime(), statusId, status))
         log.close()
         print("[{}] New status: {}".format(self.getTime(), statusId))
 
@@ -237,17 +273,28 @@ class BaseballUpdaterBotV2:
         return idsFromLog
 
     def getPlayType(self, description):
-        if "Status Change" in description: return "statusChange"
-        if "Mound Visit" in description: return "moundVisit"
-        if "Pitching Change" in description: return "pitchingChange"
-        if "Defensive Substitution" in description: return "defensiveSubstitution"
-        if "Offensive Substitution" in description: return "offensiveSubstitution"
-        if "remains in the game" in description: return "remainsInTheGame"
-        if "Game Advisory" in description: return "gameAdvisory"
-        if "Umpire Substitution" in description: return "umpireSubstitution"
-        if "Injury Delay" in description: return "injuryDelay"
-        if "left the game" in description: return "leftTheGame"
-        if "ejected" in description: return "ejected"
+        if "Status Change" in description:
+            return "statusChange"
+        if "Mound Visit" in description:
+            return "moundVisit"
+        if "Pitching Change" in description:
+            return "pitchingChange"
+        if "Defensive Substitution" in description:
+            return "defensiveSubstitution"
+        if "Offensive Substitution" in description:
+            return "offensiveSubstitution"
+        if "remains in the game" in description:
+            return "remainsInTheGame"
+        if "Game Advisory" in description:
+            return "gameAdvisory"
+        if "Umpire Substitution" in description:
+            return "umpireSubstitution"
+        if "Injury Delay" in description:
+            return "injuryDelay"
+        if "left the game" in description:
+            return "leftTheGame"
+        if "ejected" in description:
+            return "ejected"
         return 'atBat'
 
     async def postNoGameStatusOnDiscord(self, channel):
@@ -261,12 +308,15 @@ class BaseballUpdaterBotV2:
     async def postGameStatusOnDiscord(self, channel, gameStatus, awayTeamInfo, homeTeamInfo, todaysGame, gameDateTime):
         gameStatusEmbed = discord.Embed(title="Game status {} has no current post content".format(gameStatus),
                                               description="Game status {} has no current post content".format(gameStatus))
-        gameStatusPost = "Game status {} has no current post content".format(gameStatus)
+        gameStatusPost = "Game status {} has no current post content".format(
+            gameStatus)
 
         # Different embeds and posts for each status
         if gameStatus == 'Scheduled':
-            gameStart = pytz.utc.localize(datetime.strptime(gameDateTime, '%Y-%m-%dT%H:%M:%SZ'))
-            localizedGameStart = gameStart.astimezone(pytz.timezone(constants.BOT_TIMEZONE)).strftime("%I:%M %p")
+            gameStart = pytz.utc.localize(
+                datetime.strptime(gameDateTime, '%Y-%m-%dT%H:%M:%SZ'))
+            localizedGameStart = gameStart.astimezone(
+                pytz.timezone(constants.BOT_TIMEZONE)).strftime("%I:%M %p")
 
             gameStatusEmbed = discord.Embed(title=constants.SCHEDULED_GAME_STATUS_TITLE,
                                             description="The {} ({}-{}) play @ {} ({}-{}) today at {} {}".format(
@@ -276,60 +326,76 @@ class BaseballUpdaterBotV2:
             gameStatusPost = constants.SCHEDULED_GAME_STATUS_BODY
 
         if gameStatus == 'Pre-Game':
-            gameStatusEmbed = discord.Embed(title=constants.PREGAME_TITLE, description=constants.PREGAME_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.PREGAME_TITLE, description=constants.PREGAME_DESCRIPTION)
             gameStatusPost = constants.PREGAME_BODY
 
         if gameStatus == 'Warmup':
-            nullPitcherData = {'wins': '---', 'losses': '---', 'era': '---'} # This is if the pitcher was just called up and aren't in MLB.com's system yet
-            awayStartingPitcher = statsapi.player_stat_data(awayTeamInfo['probable_pitcher_id'], group="pitching", type="season")
-            homeStartingPitcher = statsapi.player_stat_data(homeTeamInfo['probable_pitcher_id'], group="pitching", type="season")
-            awayStartingPitcherData = awayStartingPitcher['stats'][0]['stats'] if awayStartingPitcher['stats'] else nullPitcherData
-            homeStartingPitcherData = homeStartingPitcher['stats'][0]['stats'] if homeStartingPitcher['stats'] else nullPitcherData
+            # This is if the pitcher was just called up and aren't in MLB.com's system yet
+            nullPitcherData = {'wins': '---', 'losses': '---', 'era': '---'}
+            awayStartingPitcher = statsapi.player_stat_data(
+                awayTeamInfo['probable_pitcher_id'], group="pitching", type="season")
+            homeStartingPitcher = statsapi.player_stat_data(
+                homeTeamInfo['probable_pitcher_id'], group="pitching", type="season")
+            awayStartingPitcherData = awayStartingPitcher['stats'][0][
+                'stats'] if awayStartingPitcher['stats'] else nullPitcherData
+            homeStartingPitcherData = homeStartingPitcher['stats'][0][
+                'stats'] if homeStartingPitcher['stats'] else nullPitcherData
 
             pregamePost = "{} Pitcher: {} ({}-{} {})\n" \
                           "{} Pitcher: {} ({}-{} {})".format(
-                awayTeamInfo['teamName'],
-                awayTeamInfo['probable_pitcher_name'], awayStartingPitcherData['wins'],
-                awayStartingPitcherData['losses'], awayStartingPitcherData['era'],
-                homeTeamInfo['teamName'],
-                homeTeamInfo['probable_pitcher_name'], homeStartingPitcherData['wins'],
-                homeStartingPitcherData['losses'], homeStartingPitcherData['era'])
+                              awayTeamInfo['teamName'],
+                              awayTeamInfo['probable_pitcher_name'], awayStartingPitcherData['wins'],
+                              awayStartingPitcherData['losses'], awayStartingPitcherData['era'],
+                              homeTeamInfo['teamName'],
+                              homeTeamInfo['probable_pitcher_name'], homeStartingPitcherData['wins'],
+                              homeStartingPitcherData['losses'], homeStartingPitcherData['era'])
 
-            gameStatusEmbed = discord.Embed(title=constants.WARMUP_TITLE, description=pregamePost)
+            gameStatusEmbed = discord.Embed(
+                title=constants.WARMUP_TITLE, description=pregamePost)
             gameStatusPost = constants.WARMUP_BODY
 
         if "Delayed Start" in gameStatus:
-            gameStatusEmbed = discord.Embed(title=constants.DELAYEDSTART_TITLE, description=constants.DELAYEDSTART_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.DELAYEDSTART_TITLE, description=constants.DELAYEDSTART_DESCRIPTION)
             gameStatusPost = constants.DELAYEDSTART_BODY
 
         # Specifically for Game Started (only goes first time game becomes "In Progress"
         if gameStatus == 'In Progress':
-            gameStatusEmbed = discord.Embed(title=constants.GAMESTARTED_TITLE, description=constants.GAMESTARTED_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.GAMESTARTED_TITLE, description=constants.GAMESTARTED_DESCRIPTION)
             gameStatusPost = constants.GAMESTARTED_BODY
 
         if gameStatus == 'Delayed: Rain':
-            gameStatusEmbed = discord.Embed(title=constants.RAINDELAY_TITLE, description=constants.RAINDELAY_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.RAINDELAY_TITLE, description=constants.RAINDELAY_DESCRIPTION)
             gameStatusPost = constants.RAINDELAY_BODY
 
         if gameStatus == 'Suspended: Rain':
-            gameStatusEmbed = discord.Embed(title=constants.SUSPENDEDRAIN_TITLE, description=constants.SUSPENDEDRAIN_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.SUSPENDEDRAIN_TITLE, description=constants.SUSPENDEDRAIN_DESCRIPTION)
             gameStatusPost = constants.SUSPENDEDRAIN_BODY
 
         if gameStatus == 'Completed Early: Rain':
-            gameStatusEmbed = discord.Embed(title=constants.COMPLETEDEARLYRAIN_TITLE, description=constants.COMPLETEDEARLYRAIN_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.COMPLETEDEARLYRAIN_TITLE, description=constants.COMPLETEDEARLYRAIN_DESCRIPTION)
             gameStatusPost = constants.COMPLETEDEARLYRAIN_BODY
 
         if gameStatus == 'Postponed':
-            gameStatusEmbed = discord.Embed(title=constants.POSTPONED_TITLE.format(todaysGame), description=constants.POSTPONED_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(title=constants.POSTPONED_TITLE.format(
+                todaysGame), description=constants.POSTPONED_DESCRIPTION)
             gameStatusPost = constants.POSTPONED_BODY
 
         if gameStatus == 'Game Over':
-            endOfGameAnnouncement = self.formatEndOfGameAnnouncement(awayTeamInfo, homeTeamInfo)
+            endOfGameAnnouncement = self.formatEndOfGameAnnouncement(
+                awayTeamInfo, homeTeamInfo)
             if (self.favoriteTeamWon(awayTeamInfo, homeTeamInfo)):
-                gameStatusEmbed = discord.Embed(title=constants.GAMEOVER_WIN_TITLE, description=endOfGameAnnouncement)
+                gameStatusEmbed = discord.Embed(
+                    title=constants.GAMEOVER_WIN_TITLE, description=endOfGameAnnouncement)
                 gameStatusPost = constants.GAMEOVER_WIN_BODY
             else:
-                gameStatusEmbed = discord.Embed(title=constants.GAMEOVER_LOSS_TITLE, description=endOfGameAnnouncement)
+                gameStatusEmbed = discord.Embed(
+                    title=constants.GAMEOVER_LOSS_TITLE, description=endOfGameAnnouncement)
                 gameStatusPost = constants.GAMEOVER_LOSS_BODY
 
         if gameStatus == 'Final':
@@ -338,15 +404,18 @@ class BaseballUpdaterBotV2:
             gameStatusPost = constants.FINAL_BODY
 
         if gameStatus == 'Game Over: Tied':
-            gameStatusEmbed = discord.Embed(title=constants.GAMEOVERTIED_TITLE, description=constants.GAMEOVERTIED_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.GAMEOVERTIED_TITLE, description=constants.GAMEOVERTIED_DESCRIPTION)
             gameStatusPost = constants.GAMEOVERTIED_BODY
 
         if gameStatus == 'Final: Tied':
-            gameStatusEmbed = discord.Embed(title=constants.FINALTIED_TITLE, description=constants.FINALTIED_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.FINALTIED_TITLE, description=constants.FINALTIED_DESCRIPTION)
             gameStatusPost = constants.FINALTIED_BODY
 
         if 'Manager challenge' in gameStatus:
-            gameStatusEmbed = discord.Embed(title=constants.MANAGER_CHALLENGE_TITLE, description=constants.MANAGER_CHALLENGE_DESCRIPTION)
+            gameStatusEmbed = discord.Embed(
+                title=constants.MANAGER_CHALLENGE_TITLE, description=constants.MANAGER_CHALLENGE_DESCRIPTION)
             gameStatusPost = constants.MANAGER_CHALLENGE_BODY
 
         await channel.send(embed=gameStatusEmbed)
@@ -367,8 +436,8 @@ class BaseballUpdaterBotV2:
                "```\n" \
                "{}" \
                "{}".format(self.formatLinescoreForDiscord(info)
-                                          if not self.gameEventInningBeforeCurrentLinescoreInning(info)
-                                          else self.formatLinescoreCatchingUpForDiscord(info),
+                           if not self.gameEventInningBeforeCurrentLinescoreInning(info)
+                           else self.formatLinescoreCatchingUpForDiscord(info),
                            self.formatPitchCount(info), info['description'],
                            self.funEmoji(info),
                            self.endOfInning(info))
@@ -379,13 +448,16 @@ class BaseballUpdaterBotV2:
                "  {} {}    ├───┼──┼──┼──┤\n" \
                "{}   │{:<3}│{:>2}│{:>2}│{:>2}│\n" \
                "         └───┴──┴──┴──┘".format(
-            self.formatInning(info),
-            self.formatSecondBase(info['manOnSecond']),
-            info['awayTeamAbbv'].upper(), info['awayStats_linescore']['runs'],info['awayStats_linescore']['hits'], info['awayStats_linescore']['errors'],
-            self.formatThirdBase(info['manOnThird']), self.formatFirstBase(info['manOnFirst']),
-            self.formatOuts(info['outs']),
-            info['homeTeamAbbv'].upper(), info['homeStats_linescore']['runs'],info['homeStats_linescore']['hits'], info['homeStats_linescore']['errors']
-        )
+                   self.formatInning(info),
+                   self.formatSecondBase(info['manOnSecond']),
+                   info['awayTeamAbbv'].upper(
+                   ), info['awayStats_linescore']['runs'], info['awayStats_linescore']['hits'], info['awayStats_linescore']['errors'],
+                   self.formatThirdBase(info['manOnThird']), self.formatFirstBase(
+                       info['manOnFirst']),
+                   self.formatOuts(info['outs']),
+                   info['homeTeamAbbv'].upper(
+                   ), info['homeStats_linescore']['runs'], info['homeStats_linescore']['hits'], info['homeStats_linescore']['errors']
+                   )
 
     def gameEventInningBeforeCurrentLinescoreInning(self, info):
         return True if int(info['inning']) < int(info['currentInning_linescore']) else False
@@ -396,15 +468,16 @@ class BaseballUpdaterBotV2:
                "  BOT         CATCHING\n" \
                " BEHIND          UP\n" \
                "".format(
-            self.formatInning(info)
-        )
+                   self.formatInning(info)
+                   )
 
     def formatInning(self, info):
         return "{} {:>2}".format(info['inningHalf'].upper()[0:3], info['inning'])
 
     def formatOuts(self, outs):
         outOrOuts = " Outs"
-        if outs == "1": outOrOuts = "  Out"
+        if outs == "1":
+            outOrOuts = "  Out"
         return "".join([outs, outOrOuts])
 
     def formatFirstBase(self, runnerOnBaseStatus):
@@ -422,14 +495,18 @@ class BaseballUpdaterBotV2:
         return "○"
 
     def formatPitchCount(self, info):
-        if info['playType'] == 'atBat': return "On a {}-{} count, ".format(info['balls'], info['strikes'])
-        else: return ""
+        if info['playType'] == 'atBat':
+            return "On a {}-{} count, ".format(info['balls'], info['strikes'])
+        else:
+            return ""
 
     def endOfInning(self, info):
         if info['outs'] == "3":
-            endOfInningString = "```------ End of {} ------\n{}\n------ End of {} ------```".format(self.formatInning(info), info['fullLinescoreString'], self.formatInning(info))
+            endOfInningString = "```------ End of {} ------\n{}\n------ End of {} ------```".format(
+                self.formatInning(info), info['fullLinescoreString'], self.formatInning(info))
             if info['inning'] == "7" and info['inningHalf'].upper()[0:3] == "TOP":
-                endOfInningString = "{}\n{}".format(endOfInningString, constants.SEVENTH_INNING_STRETCH)
+                endOfInningString = "{}\n{}".format(
+                    endOfInningString, constants.SEVENTH_INNING_STRETCH)
             return endOfInningString
         return ""
 
@@ -456,43 +533,66 @@ class BaseballUpdaterBotV2:
         ## Pitching emoji
         if info['strikes'] == '3':
             if self.homeTeamBatting(info):
-                emoji = "{} K Tracker ({}): ".format(info['awayTeamName'], len(info['strikeoutTracker']['away']))
-                if info['strikeoutTracker']['away'] == [True, True, True]: # If KKK, make "3 Ks"
-                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                emoji = "{} K Tracker ({}): ".format(
+                    info['awayTeamName'], len(info['strikeoutTracker']['away']))
+                if info['strikeoutTracker']['away'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
                 else:
                     for swingingStrikeout in info['strikeoutTracker']['away']:
-                        if swingingStrikeout: emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT         if self.checkIfFavoriteTeam(info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
-                        else:                 emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
             else:
-                emoji = "{} K Tracker ({}): ".format(info['homeTeamName'], len(info['strikeoutTracker']['home']))
-                if info['strikeoutTracker']['home'] == [True, True, True]: # If KKK, make "3 Ks"
-                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                emoji = "{} K Tracker ({}): ".format(
+                    info['homeTeamName'], len(info['strikeoutTracker']['home']))
+                if info['strikeoutTracker']['home'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
                 else:
                     for swingingStrikeout in info['strikeoutTracker']['home']:
-                        if swingingStrikeout: emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT         if self.checkIfFavoriteTeam(info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
-                        else:                 emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
             emoji = ''.join([emoji, '\n'])
 
         ## Batting emoji
-        favTeamIsBatting = (self.checkIfFavoriteTeam(info['homeTeamId']) and self.homeTeamBatting(info)) or (self.checkIfFavoriteTeam(info['awayTeamId']) and not self.homeTeamBatting(info))
+        favTeamIsBatting = (self.checkIfFavoriteTeam(info['homeTeamId']) and self.homeTeamBatting(
+            info)) or (self.checkIfFavoriteTeam(info['awayTeamId']) and not self.homeTeamBatting(info))
         # Grand Slam
-        if info['event'] == 'Home Run' and info['rbi'] == 4: # "grand slam" in info['description']:
-            emoji = ''.join([emoji, constants.EMOTE_GRAND_SLAM if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_GRAND_SLAM, "\n"])
+        # "grand slam" in info['description']:
+        if info['event'] == 'Home Run' and info['rbi'] == 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_GRAND_SLAM if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_GRAND_SLAM, "\n"])
         # Home Run
-        elif info['event'] == 'Home Run' and info['rbi'] != 4: # ("homers" in ) or ("home run" in info['description']):
-            emoji = ''.join([emoji, constants.EMOTE_HOMERUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_HOMERUN, "\n"])
+        # ("homers" in ) or ("home run" in info['description']):
+        elif info['event'] == 'Home Run' and info['rbi'] != 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_HOMERUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_HOMERUN, "\n"])
         # RBIs
         for rbis in range(info['rbis']):
-            emoji = ''.join([emoji, constants.EMOTE_RBI if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_RBI, " "])
+            emoji = ''.join(
+                [emoji, constants.EMOTE_RBI if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_RBI, " "])
 
-        if 'scores' in info['description']:  # Bugfix for if a batter scores on a stolen base or wild pitch, because the atbat still has a run scored even if the batter pops out
+        # Bugfix for if a batter scores on a stolen base or wild pitch, because the atbat still has a run scored even if the batter pops out
+        if 'scores' in info['description']:
             # Earned runs that are not RBIs (run scores on GIDP)
             for earnedRunsNotRBIs in range(info['runsEarned'] - info['rbis']):
-                emoji = ''.join([emoji, constants.EMOTE_EARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_EARNED_RUN, " "])
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_EARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_EARNED_RUN, " "])
             # Unearned runs
-            unearnedRuns = info['runsScored'] - info['rbis'] - info['runsEarned'] if info['runsScored'] - info['rbis'] - info['runsEarned'] > 0 else 0
+            unearnedRuns = info['runsScored'] - info['rbis'] - \
+                info['runsEarned'] if info['runsScored'] - \
+                info['rbis'] - info['runsEarned'] > 0 else 0
             for unearnedRunsNotRBIs in range(unearnedRuns):
-                emoji = ''.join([emoji, constants.EMOTE_UNEARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_UNEARNED_RUN, " "])
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_UNEARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_UNEARNED_RUN, " "])
 
         return emoji
 
@@ -500,16 +600,216 @@ class BaseballUpdaterBotV2:
         return self.TEAM_ID == teamId
 
     def formatEndOfGameAnnouncement(self, team1Info, team2Info):
-        favTeamInfo = team1Info if self.checkIfFavoriteTeam(team1Info['id']) else team2Info
-        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(team1Info['id']) else team1Info
-        beatOrLostTo = "beat" if (favTeamInfo['game_score'] > opponentTeamInfo['game_score']) else "lost to"
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
+        beatOrLostTo = "beat" if (
+            favTeamInfo['game_score'] > opponentTeamInfo['game_score']) else "lost to"
         return "The {} {} the {} by a score of {}-{}".format(
             favTeamInfo['teamName'], beatOrLostTo, opponentTeamInfo['teamName'], favTeamInfo['game_score'], opponentTeamInfo['game_score'])
 
     def favoriteTeamWon(self, team1Info, team2Info):
-        favTeamInfo = team1Info if self.checkIfFavoriteTeam(team1Info['id']) else team2Info
-        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(team1Info['id']) else team1Info
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
         return favTeamInfo['game_score'] > opponentTeamInfo['game_score']
+
+
+if __name__ == '__main__':
+    baseballUpdaterBot = BaseballUpdaterBotV2()
+    baseballUpdaterBot.run()
+
+    def homeTeamBatting(self, info):
+        return info['inningHalf'].upper()[0:3] == "BOT"
+
+    def funEmoji(self, info):
+        emoji = ""
+
+        ## Pitching emoji
+        if info['strikes'] == '3':
+            if self.homeTeamBatting(info):
+                emoji = "{} K Tracker ({}): ".format(
+                    info['awayTeamName'], len(info['strikeoutTracker']['away']))
+                if info['strikeoutTracker']['away'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                else:
+                    for swingingStrikeout in info['strikeoutTracker']['away']:
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+            else:
+                emoji = "{} K Tracker ({}): ".format(
+                    info['homeTeamName'], len(info['strikeoutTracker']['home']))
+                if info['strikeoutTracker']['home'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                else:
+                    for swingingStrikeout in info['strikeoutTracker']['home']:
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+            emoji = ''.join([emoji, '\n'])
+
+        ## Batting emoji
+        favTeamIsBatting = (self.checkIfFavoriteTeam(info['homeTeamId']) and self.homeTeamBatting(
+            info)) or (self.checkIfFavoriteTeam(info['awayTeamId']) and not self.homeTeamBatting(info))
+        # Grand Slam
+        # "grand slam" in info['description']:
+        if info['event'] == 'Home Run' and info['rbi'] == 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_GRAND_SLAM if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_GRAND_SLAM, "\n"])
+        # Home Run
+        # ("homers" in ) or ("home run" in info['description']):
+        elif info['event'] == 'Home Run' and info['rbi'] != 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_HOMERUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_HOMERUN, "\n"])
+        # RBIs
+        for rbis in range(info['rbis']):
+            emoji = ''.join(
+                [emoji, constants.EMOTE_RBI if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_RBI, " "])
+
+        # Bugfix for if a batter scores on a stolen base or wild pitch, because the atbat still has a run scored even if the batter pops out
+        if 'scores' in info['description']:
+            # Earned runs that are not RBIs (run scores on GIDP)
+            for earnedRunsNotRBIs in range(info['runsEarned'] - info['rbis']):
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_EARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_EARNED_RUN, " "])
+            # Unearned runs
+            unearnedRuns = info['runsScored'] - info['rbis'] - \
+                info['runsEarned'] if info['runsScored'] - \
+                info['rbis'] - info['runsEarned'] > 0 else 0
+            for unearnedRunsNotRBIs in range(unearnedRuns):
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_UNEARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_UNEARNED_RUN, " "])
+
+        return emoji
+
+    def checkIfFavoriteTeam(self, teamId):
+        return self.TEAM_ID == teamId
+
+    def formatEndOfGameAnnouncement(self, team1Info, team2Info):
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
+        beatOrLostTo = "beat" if (
+            favTeamInfo['game_score'] > opponentTeamInfo['game_score']) else "lost to"
+        return "The {} {} the {} by a score of {}-{}".format(
+            favTeamInfo['teamName'], beatOrLostTo, opponentTeamInfo['teamName'], favTeamInfo['game_score'], opponentTeamInfo['game_score'])
+
+    def favoriteTeamWon(self, team1Info, team2Info):
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
+        return favTeamInfo['game_score'] > opponentTeamInfo['game_score']
+
+
+if __name__ == '__main__':
+    baseballUpdaterBot = BaseballUpdaterBotV2()
+    baseballUpdaterBot.run()
+
+    def homeTeamBatting(self, info):
+        return info['inningHalf'].upper()[0:3] == "BOT"
+
+    def funEmoji(self, info):
+        emoji = ""
+
+        ## Pitching emoji
+        if info['strikes'] == '3':
+            if self.homeTeamBatting(info):
+                emoji = "{} K Tracker ({}): ".format(
+                    info['awayTeamName'], len(info['strikeoutTracker']['away']))
+                if info['strikeoutTracker']['away'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                else:
+                    for swingingStrikeout in info['strikeoutTracker']['away']:
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['awayTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+            else:
+                emoji = "{} K Tracker ({}): ".format(
+                    info['homeTeamName'], len(info['strikeoutTracker']['home']))
+                if info['strikeoutTracker']['home'] == [True, True, True]:  # If KKK, make "3 Ks"
+                    emoji = ''.join([emoji, '3 ', constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                        info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT, 's'])
+                else:
+                    for swingingStrikeout in info['strikeoutTracker']['home']:
+                        if swingingStrikeout:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT])
+                        else:
+                            emoji = ''.join([emoji, constants.EMOTE_STRIKEOUT_LOOKING if self.checkIfFavoriteTeam(
+                                info['homeTeamId']) else constants.EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING])
+            emoji = ''.join([emoji, '\n'])
+
+        ## Batting emoji
+        favTeamIsBatting = (self.checkIfFavoriteTeam(info['homeTeamId']) and self.homeTeamBatting(
+            info)) or (self.checkIfFavoriteTeam(info['awayTeamId']) and not self.homeTeamBatting(info))
+        # Grand Slam
+        # "grand slam" in info['description']:
+        if info['event'] == 'Home Run' and info['rbi'] == 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_GRAND_SLAM if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_GRAND_SLAM, "\n"])
+        # Home Run
+        # ("homers" in ) or ("home run" in info['description']):
+        elif info['event'] == 'Home Run' and info['rbi'] != 4:
+            emoji = ''.join(
+                [emoji, constants.EMOTE_HOMERUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_HOMERUN, "\n"])
+        # RBIs
+        for rbis in range(info['rbis']):
+            emoji = ''.join(
+                [emoji, constants.EMOTE_RBI if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_RBI, " "])
+
+        # Bugfix for if a batter scores on a stolen base or wild pitch, because the atbat still has a run scored even if the batter pops out
+        if 'scores' in info['description']:
+            # Earned runs that are not RBIs (run scores on GIDP)
+            for earnedRunsNotRBIs in range(info['runsEarned'] - info['rbis']):
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_EARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_EARNED_RUN, " "])
+            # Unearned runs
+            unearnedRuns = info['runsScored'] - info['rbis'] - \
+                info['runsEarned'] if info['runsScored'] - \
+                info['rbis'] - info['runsEarned'] > 0 else 0
+            for unearnedRunsNotRBIs in range(unearnedRuns):
+                emoji = ''.join(
+                    [emoji, constants.EMOTE_UNEARNED_RUN if favTeamIsBatting else constants.EMOTE_OTHER_TEAM_UNEARNED_RUN, " "])
+
+        return emoji
+
+    def checkIfFavoriteTeam(self, teamId):
+        return self.TEAM_ID == teamId
+
+    def formatEndOfGameAnnouncement(self, team1Info, team2Info):
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
+        beatOrLostTo = "beat" if (
+            favTeamInfo['game_score'] > opponentTeamInfo['game_score']) else "lost to"
+        return "The {} {} the {} by a score of {}-{}".format(
+            favTeamInfo['teamName'], beatOrLostTo, opponentTeamInfo['teamName'], favTeamInfo['game_score'], opponentTeamInfo['game_score'])
+
+    def favoriteTeamWon(self, team1Info, team2Info):
+        favTeamInfo = team1Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team2Info
+        opponentTeamInfo = team2Info if self.checkIfFavoriteTeam(
+            team1Info['id']) else team1Info
+        return favTeamInfo['game_score'] > opponentTeamInfo['game_score']
+
 
 if __name__ == '__main__':
     baseballUpdaterBot = BaseballUpdaterBotV2()

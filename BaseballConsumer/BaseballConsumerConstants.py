@@ -17,7 +17,6 @@ EMOTE_OTHER_TEAM_STRIKEOUT = "K"
 EMOTE_OTHER_TEAM_STRIKEOUT_LOOKING = "ꓘ"
 
 
-
 # Game Status Constants
 NO_GAME_STATUS_TITLE = "No Game Today"
 NO_GAME_STATUS_DESCRIPTION = "Take a day off, relax :)"

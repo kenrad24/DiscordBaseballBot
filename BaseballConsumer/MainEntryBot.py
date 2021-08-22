@@ -15,6 +15,7 @@ SETTINGS_FILE = './discordSettings.doNotUpload.json'
 client = discord.Client()
 # logging.basicConfig(level=logging.DEBUG)
 
+
 def read_settings():
     error_msg = []
     with open(SETTINGS_FILE) as data:
@@ -22,23 +23,30 @@ def read_settings():
 
         global DISCORD_CLIENT_ID
         DISCORD_CLIENT_ID = settings.get('DISCORD_CLIENT_ID')
-        if DISCORD_CLIENT_ID == None: error_msg.append("Missing DISCORD_CLIENT_ID")
+        if DISCORD_CLIENT_ID == None:
+            error_msg.append("Missing DISCORD_CLIENT_ID")
 
         global DISCORD_CLIENT_SECRET
         DISCORD_CLIENT_SECRET = settings.get('DISCORD_CLIENT_SECRET')
-        if DISCORD_CLIENT_SECRET == None: error_msg.append("Missing DISCORD_CLIENT_SECRET")
+        if DISCORD_CLIENT_SECRET == None:
+            error_msg.append("Missing DISCORD_CLIENT_SECRET")
 
         global DISCORD_TOKEN
         DISCORD_TOKEN = settings.get('DISCORD_TOKEN')
-        if DISCORD_TOKEN == None: error_msg.append("Missing DISCORD_TOKEN")
+        if DISCORD_TOKEN == None:
+            error_msg.append("Missing DISCORD_TOKEN")
 
         global DISCORD_GAME_THREAD_CHANNEL_ID
-        DISCORD_GAME_THREAD_CHANNEL_ID = settings.get('DISCORD_GAME_THREAD_CHANNEL_ID')
-        if DISCORD_GAME_THREAD_CHANNEL_ID == None: error_msg.append("Missing DISCORD_GAME_THREAD_CHANNEL_ID")
+        DISCORD_GAME_THREAD_CHANNEL_ID = settings.get(
+            'DISCORD_GAME_THREAD_CHANNEL_ID')
+        if DISCORD_GAME_THREAD_CHANNEL_ID == None:
+            error_msg.append("Missing DISCORD_GAME_THREAD_CHANNEL_ID")
     if error_msg:
-        for error in error_msg: print(error)
+        for error in error_msg:
+            print(error)
         exit("Exiting due to missing setting")
     return 0
+
 
 async def my_background_task():
     baseballUpdaterBotV2 = BaseballUpdaterBotV2()
